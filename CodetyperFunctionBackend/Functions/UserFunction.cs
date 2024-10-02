@@ -1,9 +1,11 @@
 ﻿using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using System.Data.SqlClient;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 
 namespace CodetyperFunctionBackend.Functions
@@ -13,19 +15,18 @@ namespace CodetyperFunctionBackend.Functions
         private readonly ILogger _logger;
         private readonly string _connectionString;
 
+        private readonly string _jwtSecret;
+        private readonly string _issuer;
+        private readonly string _audience;
+
         public UserFunction(ILoggerFactory loggerFactory)
         {
             _logger = loggerFactory.CreateLogger<UserFunction>();
             _connectionString = Environment.GetEnvironmentVariable("SqlConnectionString")!;
-        }
 
-        private string HashPassword(string password)
-        {
-            using (SHA256 sha256 = SHA256.Create())
-            {
-                byte[] hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                return Convert.ToBase64String(hashedBytes);
-            }
+            _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET") ?? throw new InvalidOperationException("JWT_SECRET not set");
+            _issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? throw new InvalidOperationException("JWT_ISSUER not set");
+            _audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? throw new InvalidOperationException("JWT_AUDIENCE not set");
         }
 
         [Function("RegisterUser")]
@@ -38,7 +39,7 @@ namespace CodetyperFunctionBackend.Functions
             string username = data?.username;
             string password = data?.password;
             string email = data?.email;
-            string roleName = "User";
+            string roleName = "Admin";
 
             if (string.IsNullOrEmpty(username) || username.Length < 3)
             {
@@ -54,18 +55,18 @@ namespace CodetyperFunctionBackend.Functions
                 return badRequestResponse;
             }
 
-            if (string.IsNullOrEmpty(email)) 
+            if (string.IsNullOrEmpty(email))
             {
                 var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badRequestResponse.WriteStringAsync("Email is required.");
                 return badRequestResponse;
             }
 
-            string passwordHash = HashPassword(password);
+            string passwordHash = BCrypt.Net.BCrypt.HashPassword(password);
 
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
-                conn.Open();
+                await conn.OpenAsync();
 
                 string checkUserQuery = "SELECT COUNT(1) FROM Users WHERE Username = @Username";
                 SqlCommand checkUserCmd = new SqlCommand(checkUserQuery, conn);
@@ -96,12 +97,6 @@ namespace CodetyperFunctionBackend.Functions
             return response;
         }
 
-        private bool VerifyPassword(string password, string storedPasswordHash)
-        {
-            string passwordHash = HashPassword(password);
-            return passwordHash == storedPasswordHash;
-        }
-
         [Function("LoginUser")]
         public async Task<HttpResponseData> LoginUser([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req)
         {
@@ -120,28 +115,68 @@ namespace CodetyperFunctionBackend.Functions
             }
 
             string storedPasswordHash = null;
+            string userRole = null;
 
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
-                conn.Open();
-                string query = "SELECT PasswordHash FROM Users WHERE Username = @Username";
-                SqlCommand cmd = new SqlCommand(query, conn);
-                cmd.Parameters.AddWithValue("@Username", username);
+                await conn.OpenAsync();
 
-                storedPasswordHash = (string)await cmd.ExecuteScalarAsync();
+                var query = @"
+                    SELECT u.PasswordHash, r.RoleName 
+                    FROM Users u 
+                    INNER JOIN Roles r ON u.RoleName = r.RoleName
+                    WHERE u.Username = @Username";
+
+                using (var cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Username", username);
+
+                    using (var reader = await cmd.ExecuteReaderAsync())
+                    {
+                        if (reader.Read())
+                        {
+                            storedPasswordHash = reader["PasswordHash"].ToString();
+                            userRole = reader["RoleName"].ToString();
+                        }
+                    }
+                }
             }
 
-            if (storedPasswordHash == null || !VerifyPassword(password, storedPasswordHash))
+            if (storedPasswordHash == null || !BCrypt.Net.BCrypt.Verify(password, storedPasswordHash))
             {
                 var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
                 await unauthorizedResponse.WriteStringAsync("Invalid credentials.");
                 return unauthorizedResponse;
             }
 
+            var token = GenerateJwtToken(username, userRole);
+
             var successResponse = req.CreateResponse(HttpStatusCode.OK);
+            successResponse.Headers.Add("Authorization", $"Bearer {token}");
             await successResponse.WriteStringAsync("Login successful.");
             return successResponse;
         }
-        
+
+        private string GenerateJwtToken(string username, string userRole)
+        {
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSecret));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+            new Claim(ClaimTypes.Name, username),
+            new Claim(ClaimTypes.Role, userRole)
+        };
+
+            var token = new JwtSecurityToken(
+                issuer: _issuer,
+                audience: _audience,
+                claims: claims,
+                expires: DateTime.Now.AddHours(1),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
     }
 }

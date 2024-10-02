@@ -1,25 +1,31 @@
 ﻿using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 using System.Data.SqlClient;
 using System.Net;
 
 namespace CodetyperFunctionBackend.Functions
 {
-    internal class AddLanguageFunction
+    internal class LanguageFunction
     {
         private readonly ILogger _logger;
 
-        public AddLanguageFunction(ILoggerFactory loggerFactory)
+        public LanguageFunction(ILoggerFactory loggerFactory)
         {
-            _logger = loggerFactory.CreateLogger<AddLanguageFunction>();
+            _logger = loggerFactory.CreateLogger<LanguageFunction>();
         }
 
-        [Function("AddLanguageFunction")]
-        public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequestData req)
+        [Function("AddLanguage")]
+        public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequestData req)
         {
             _logger.LogInformation("Processing a request to add a language.");
+
+            if (!AuthHelper.IsUserAuthorized(req, "SuperAdmin", "Admin"))
+            {
+                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
+                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
+                return forbiddenResponse;
+            }
 
             var requestBody = await req.ReadAsStringAsync();
 
