@@ -10,7 +10,7 @@ using System.Text;
 
 namespace CodetyperFunctionBackend.Functions
 {
-    internal class UserFunction
+    internal class AuthFunctions
     {
         private readonly ILogger _logger;
         private readonly string _connectionString;
@@ -19,9 +19,9 @@ namespace CodetyperFunctionBackend.Functions
         private readonly string _issuer;
         private readonly string _audience;
 
-        public UserFunction(ILoggerFactory loggerFactory)
+        public AuthFunctions(ILoggerFactory loggerFactory)
         {
-            _logger = loggerFactory.CreateLogger<UserFunction>();
+            _logger = loggerFactory.CreateLogger<AuthFunctions>();
             _connectionString = Environment.GetEnvironmentVariable("SqlConnectionString")!;
 
             _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET") ?? throw new InvalidOperationException("JWT_SECRET not set");
