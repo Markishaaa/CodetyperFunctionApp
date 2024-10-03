@@ -7,13 +7,14 @@ import 'react-markdown-editor-lite/lib/index.css';
 const mdParser = new MarkdownIt();
 
 const AddTaskContainer: React.FC = () => {
+    const creatorId : string = sessionStorage.getItem("creatorId")!;
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
 
     const handleAddTask = async () => {
         const processedDescription = processMarkdown(description);
 
-        const taskDto = { name: name, description: processedDescription };
+        const taskDto = { creatorId: creatorId, description: processedDescription, name: name };
         const result = await addTask(taskDto);
         console.log(result);
     };

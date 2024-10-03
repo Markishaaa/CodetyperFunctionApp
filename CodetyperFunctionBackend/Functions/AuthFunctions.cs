@@ -116,13 +116,14 @@ namespace CodetyperFunctionBackend.Functions
 
             string storedPasswordHash = null;
             string userRole = null;
+            string userId = null;
 
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
                 await conn.OpenAsync();
 
                 var query = @"
-                    SELECT u.PasswordHash, r.RoleName 
+                    SELECT u.PasswordHash, r.RoleName, u.UserId
                     FROM Users u 
                     INNER JOIN Roles r ON u.RoleName = r.RoleName
                     WHERE u.Username = @Username";
@@ -137,6 +138,7 @@ namespace CodetyperFunctionBackend.Functions
                         {
                             storedPasswordHash = reader["PasswordHash"].ToString();
                             userRole = reader["RoleName"].ToString();
+                            userId = reader["UserId"].ToString();
                         }
                     }
                 }
@@ -149,7 +151,7 @@ namespace CodetyperFunctionBackend.Functions
                 return unauthorizedResponse;
             }
 
-            var token = GenerateJwtToken(username, userRole);
+            var token = GenerateJwtToken(username, userRole, userId);
 
             var successResponse = req.CreateResponse(HttpStatusCode.OK);
             successResponse.Headers.Add("Authorization", $"Bearer {token}");
@@ -158,7 +160,7 @@ namespace CodetyperFunctionBackend.Functions
             return successResponse;
         }
 
-        private string GenerateJwtToken(string username, string userRole)
+        private string GenerateJwtToken(string username, string userRole, string userId)
         {
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSecret));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -166,7 +168,8 @@ namespace CodetyperFunctionBackend.Functions
             var claims = new[]
             {
             new Claim("username", username),
-            new Claim("role", userRole)
+            new Claim("role", userRole),
+            new Claim("userId", userId)
         };
 
             var token = new JwtSecurityToken(

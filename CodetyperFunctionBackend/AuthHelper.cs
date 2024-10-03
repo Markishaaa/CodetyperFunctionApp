@@ -1,7 +1,6 @@
 ﻿using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using System.Net;
 using System.Security.Claims;
 using System.Text;
 
@@ -60,7 +59,7 @@ namespace CodetyperFunctionBackend
             var claimsPrincipal = ValidateJwtToken(token);
             if (claimsPrincipal == null)
             {
-                Console.WriteLine("why");
+                Console.WriteLine("session expired");
                 // token validation failed, handle the error
                 return false;
             }
@@ -69,7 +68,7 @@ namespace CodetyperFunctionBackend
             var role = claimsPrincipal.FindFirst(ClaimTypes.Role)?.Value;
             Console.WriteLine("role: " + role);
 
-            foreach ( var roleClaim in roles ) 
+            foreach (var roleClaim in roles)
             {
                 Console.WriteLine("role claim" + roleClaim);
                 if (roleClaim.Equals(role))

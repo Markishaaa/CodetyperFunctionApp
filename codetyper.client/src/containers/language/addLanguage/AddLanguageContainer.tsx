@@ -1,17 +1,27 @@
 import React, { useState } from 'react';
 import { addLanguage } from '../../../services/LanguageService';
+import { toast } from 'react-toastify';
 
 const AddLanguageContainer: React.FC = () => {
     const [languageName, setLanguageName] = useState("");
 
     const handleAddLanguage = async () => {
-        console.log('Language Name:', languageName);
+        if (!languageName) {
+            toast.error("Language name cannot be empty.");
+            return;
+        }
+
         try {
-            await addLanguage(languageName);
-            console.log("successfully added");
+            const result = await addLanguage(languageName);
+            if (result.success)
+                toast.success(result.message);
+            else
+                toast.error(result.message);
         } catch (error) {
             if (error instanceof Error)
-                console.error(error.message);
+                toast.error(error.message);
+            else
+                toast.error("An unknown error occurred.");
         }
     };
 

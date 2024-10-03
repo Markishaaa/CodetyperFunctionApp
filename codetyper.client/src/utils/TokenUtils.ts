@@ -3,17 +3,18 @@ import { jwtDecode } from "jwt-decode";
 interface TokenPayload {
     username: string;
     role: string;
+    userId: string;
     exp: number;
 }
 
 export const extractUserInfo = (token: string) => {
     try {
         const decoded = jwtDecode<TokenPayload>(token);
-        console.log("decoded username: ", decoded.username);
-        console.log("decoded role: ", decoded.role);
+
         return {
             username: decoded.username,
             role: decoded.role,
+            userId: decoded.userId
         };
     } catch (error) {
         console.error('Failed to decode token:', error);
