@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34723.18
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodetyperFunctionBackend", "CodetyperFunctionBackend\CodetyperFunctionBackend.csproj", "{B30898DC-01AF-4CD8-A494-7533C55F01F3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CodetyperFunctionBackend", "CodetyperFunctionBackend\CodetyperFunctionBackend.csproj", "{B30898DC-01AF-4CD8-A494-7533C55F01F3}"
+EndProject
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "codetyper.client", "codetyper.client\codetyper.client.esproj", "{0F134735-CC35-41CA-9E64-213DC36D9343}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,12 @@ Global
 		{B30898DC-01AF-4CD8-A494-7533C55F01F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B30898DC-01AF-4CD8-A494-7533C55F01F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B30898DC-01AF-4CD8-A494-7533C55F01F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F134735-CC35-41CA-9E64-213DC36D9343}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F134735-CC35-41CA-9E64-213DC36D9343}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F134735-CC35-41CA-9E64-213DC36D9343}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{0F134735-CC35-41CA-9E64-213DC36D9343}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F134735-CC35-41CA-9E64-213DC36D9343}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F134735-CC35-41CA-9E64-213DC36D9343}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
