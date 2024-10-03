@@ -153,6 +153,7 @@ namespace CodetyperFunctionBackend.Functions
 
             var successResponse = req.CreateResponse(HttpStatusCode.OK);
             successResponse.Headers.Add("Authorization", $"Bearer {token}");
+            successResponse.Headers.Add("Access-Control-Expose-Headers", "Authorization");
             await successResponse.WriteStringAsync("Login successful.");
             return successResponse;
         }
@@ -164,8 +165,8 @@ namespace CodetyperFunctionBackend.Functions
 
             var claims = new[]
             {
-            new Claim(ClaimTypes.Name, username),
-            new Claim(ClaimTypes.Role, userRole)
+            new Claim("username", username),
+            new Claim("role", userRole)
         };
 
             var token = new JwtSecurityToken(
