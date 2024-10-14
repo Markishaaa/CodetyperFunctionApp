@@ -1,0 +1,7 @@
+.cm-s-material.CodeMirror {
+    user-select: none;
+}
+
+.editor {
+    min-height: 35rem;
+}
