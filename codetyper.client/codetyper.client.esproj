@@ -9,8 +9,10 @@
     <BuildOutputFolder>$(MSBuildProjectDirectory)\dist</BuildOutputFolder>
   </PropertyGroup>
   <ItemGroup>
-    <Folder Include="src\containers\task\showTasks\" />
-    <Folder Include="src\models\" />
+    <Folder Include="src\containers\language\languageSelect\" />
+    <Folder Include="src\containers\snippet\snippetList\" />
+    <Folder Include="src\containers\snippet\addSnippet\" />
+    <Folder Include="src\containers\task\taskList\" />
     <Folder Include="src\utils\" />
     <Folder Include="src\services\" />
     <Folder Include="src\payload\" />
