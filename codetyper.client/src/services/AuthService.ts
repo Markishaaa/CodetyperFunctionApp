@@ -12,7 +12,7 @@ interface LoginData {
     password: string;
 }
 
-interface ApiResponse {
+export interface ApiResponse {
     success: boolean;
     message: string;
     token?: string;
@@ -31,19 +31,6 @@ const getAuthToken = (): string | null => {
     return token;
 };
 
-/*
-    // example usage
-
-    const response = await fetchWithToken('/GetUserData', {
-            method: 'GET',
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to fetch user data');
-        }
-
-        return await response.json();
-*/
 export const fetchWithToken = async (endpoint: string, options: RequestInit = {}) => {
     const token = getAuthToken();
     if (!token) {
@@ -131,6 +118,7 @@ const storeUserData = (token: string) => {
         console.log("username: " + userInfo.username);
         sessionStorage.setItem('username', userInfo.username);
         sessionStorage.setItem('role', userInfo.role);
+        sessionStorage.setItem('userId', userInfo.userId);
     }
 }
 
@@ -138,6 +126,7 @@ const removeUserData = () => {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('username');
     sessionStorage.removeItem('role');
+    sessionStorage.removeItem('userId');
 }
 
 export default UserData;
