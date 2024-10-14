@@ -1,4 +1,5 @@
-﻿using Microsoft.Azure.Functions.Worker.Http;
+﻿using CodetyperFunctionBackend.Model;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -13,6 +14,7 @@ namespace CodetyperFunctionBackend
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(Environment.GetEnvironmentVariable("JWT_SECRET")!);
+            JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
             try
             {
@@ -22,15 +24,18 @@ namespace CodetyperFunctionBackend
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidateIssuer = true,
+                    ValidIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER"),
                     ValidateAudience = true,
+                    ValidAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.FromMinutes(1)
                 }, out SecurityToken validatedToken);
 
                 return claimsPrincipal;
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"Token validation failed: {ex.Message}");
                 // token validation failed
                 return null;
             }
@@ -52,7 +57,7 @@ namespace CodetyperFunctionBackend
             return authHeader.Substring("Bearer ".Length).Trim(); // extract the token
         }
 
-        public static bool IsUserAuthorized(HttpRequestData req, params string[] roles)
+        public static bool IsUserAuthorized(HttpRequestData req, params Roles[] roles)
         {
             var token = GetToken(req);
 
@@ -60,21 +65,28 @@ namespace CodetyperFunctionBackend
             if (claimsPrincipal == null)
             {
                 Console.WriteLine("session expired");
-                // token validation failed, handle the error
+                return false; // token validation failed
+            }
+
+            var username = claimsPrincipal.FindFirst("username")?.Value;
+            var role = claimsPrincipal.FindFirst(ClaimTypes.Role)?.Value
+                       ?? claimsPrincipal.FindFirst("role")?.Value;
+            Console.WriteLine($"{username} {role}");
+
+            if (string.IsNullOrEmpty(role))
+            {
                 return false;
             }
 
-            var username = claimsPrincipal.FindFirst(ClaimTypes.Name)?.Value;
-            var role = claimsPrincipal.FindFirst(ClaimTypes.Role)?.Value;
-            Console.WriteLine("role: " + role);
-
-            foreach (var roleClaim in roles)
+            if (!Enum.TryParse(typeof(Roles), role, true, out var roleEnumObj) || !(roleEnumObj is Roles roleEnum))
             {
-                Console.WriteLine("role claim" + roleClaim);
-                if (roleClaim.Equals(role))
-                {
-                    return true;
-                }
+                Console.WriteLine("Invalid role claim in token");
+                return false; // invalid role in token
+            }
+
+            if (roles.Contains(roleEnum))
+            {
+                return true;
             }
 
             return false;

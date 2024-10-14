@@ -39,7 +39,7 @@ namespace CodetyperFunctionBackend.Functions
             string username = data?.username;
             string password = data?.password;
             string email = data?.email;
-            string roleName = "Admin";
+            string roleName = "User";
 
             if (string.IsNullOrEmpty(username) || username.Length < 3)
             {
@@ -64,32 +64,41 @@ namespace CodetyperFunctionBackend.Functions
 
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(password);
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
+            try
             {
-                await conn.OpenAsync();
-
-                string checkUserQuery = "SELECT COUNT(1) FROM Users WHERE Username = @Username";
-                SqlCommand checkUserCmd = new SqlCommand(checkUserQuery, conn);
-                checkUserCmd.Parameters.AddWithValue("@Username", username);
-
-                int userExists = (int)await checkUserCmd.ExecuteScalarAsync();
-
-                if (userExists > 0)
+                using (SqlConnection conn = new SqlConnection(_connectionString))
                 {
-                    var conflictResponse = req.CreateResponse(HttpStatusCode.Conflict); // 409 Conflict
-                    await conflictResponse.WriteStringAsync("Username is already taken.");
-                    return conflictResponse;
+                    await conn.OpenAsync();
+
+                    string checkUserQuery = "SELECT COUNT(1) FROM Users WHERE Username = @Username";
+                    SqlCommand checkUserCmd = new SqlCommand(checkUserQuery, conn);
+                    checkUserCmd.Parameters.AddWithValue("@Username", username);
+
+                    int userExists = (int)await checkUserCmd.ExecuteScalarAsync();
+
+                    if (userExists > 0)
+                    {
+                        var conflictResponse = req.CreateResponse(HttpStatusCode.Conflict); // 409 Conflict
+                        await conflictResponse.WriteStringAsync("Username is already taken.");
+                        return conflictResponse;
+                    }
+
+                    string insertUserQuery = "INSERT INTO Users (UserId, Username, PasswordHash, Email, RoleName, CreatedAt, UpdatedAt) " +
+                                         "VALUES (NEWID(), @Username, @PasswordHash, @Email, @RoleName, GETDATE(), GETDATE())";
+                    SqlCommand insertUserCmd = new SqlCommand(insertUserQuery, conn);
+                    insertUserCmd.Parameters.AddWithValue("@Username", username);
+                    insertUserCmd.Parameters.AddWithValue("@PasswordHash", passwordHash);
+                    insertUserCmd.Parameters.AddWithValue("@Email", email);
+                    insertUserCmd.Parameters.AddWithValue("@RoleName", roleName);
+
+                    await insertUserCmd.ExecuteNonQueryAsync();
                 }
-
-                string insertUserQuery = "INSERT INTO Users (UserId, Username, PasswordHash, Email, RoleName, CreatedAt, UpdatedAt) " +
-                                     "VALUES (NEWID(), @Username, @PasswordHash, @Email, @RoleName, GETDATE(), GETDATE())";
-                SqlCommand insertUserCmd = new SqlCommand(insertUserQuery, conn);
-                insertUserCmd.Parameters.AddWithValue("@Username", username);
-                insertUserCmd.Parameters.AddWithValue("@PasswordHash", passwordHash);
-                insertUserCmd.Parameters.AddWithValue("@Email", email);
-                insertUserCmd.Parameters.AddWithValue("@RoleName", roleName);
-
-                await insertUserCmd.ExecuteNonQueryAsync();
+            }
+            catch
+            {
+                var timeoutResponse = req.CreateResponse(HttpStatusCode.GatewayTimeout);
+                await timeoutResponse.WriteStringAsync("Cannot access the database.");
+                return timeoutResponse;
             }
 
             var response = req.CreateResponse(HttpStatusCode.Created);
@@ -118,30 +127,39 @@ namespace CodetyperFunctionBackend.Functions
             string userRole = null;
             string userId = null;
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
+            try
             {
-                await conn.OpenAsync();
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    await conn.OpenAsync();
 
-                var query = @"
+                    var query = @"
                     SELECT u.PasswordHash, r.RoleName, u.UserId
                     FROM Users u 
                     INNER JOIN Roles r ON u.RoleName = r.RoleName
                     WHERE u.Username = @Username";
 
-                using (var cmd = new SqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("@Username", username);
-
-                    using (var reader = await cmd.ExecuteReaderAsync())
+                    using (var cmd = new SqlCommand(query, conn))
                     {
-                        if (reader.Read())
+                        cmd.Parameters.AddWithValue("@Username", username);
+
+                        using (var reader = await cmd.ExecuteReaderAsync())
                         {
-                            storedPasswordHash = reader["PasswordHash"].ToString();
-                            userRole = reader["RoleName"].ToString();
-                            userId = reader["UserId"].ToString();
+                            if (reader.Read())
+                            {
+                                storedPasswordHash = reader["PasswordHash"].ToString();
+                                userRole = reader["RoleName"].ToString();
+                                userId = reader["UserId"].ToString();
+                            }
                         }
                     }
                 }
+            }
+            catch
+            {
+                var timeoutResponse = req.CreateResponse(HttpStatusCode.GatewayTimeout);
+                await timeoutResponse.WriteStringAsync("Cannot access the database.");
+                return timeoutResponse;
             }
 
             if (storedPasswordHash == null || !BCrypt.Net.BCrypt.Verify(password, storedPasswordHash))
