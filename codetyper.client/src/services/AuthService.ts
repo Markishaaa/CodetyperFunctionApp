@@ -1,3 +1,4 @@
+import { toast } from "react-toastify";
 import { API_BASE_URL } from "../configurations/config";
 import { extractUserInfo, isTokenExpired } from "../utils/TokenUtils";
 
@@ -24,7 +25,8 @@ const getAuthToken = (): string | null => {
     if (token && isTokenExpired(token)) {
         removeUserData();
 
-        window.location.href = '/login';
+        window.location.href = '/auth';
+        toast.error("Your session has timed out. Please log in again.");
         return null;
     }
 
@@ -115,7 +117,6 @@ const storeUserData = (token: string) => {
     const userInfo = extractUserInfo(token);
 
     if (userInfo) {
-        console.log("username: " + userInfo.username);
         sessionStorage.setItem('username', userInfo.username);
         sessionStorage.setItem('role', userInfo.role);
         sessionStorage.setItem('userId', userInfo.userId);
