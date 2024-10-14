@@ -1,10 +1,10 @@
-﻿using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.Azure.Functions.Worker;
-using System.Net;
-using Microsoft.Extensions.Logging;
+﻿using CodetyperFunctionBackend.Model;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Data.SqlClient;
-using CodetyperFunctionBackend.Model;
+using Microsoft.Extensions.Logging;
+using System.Net;
 
 namespace CodetyperFunctionBackend.Functions
 {
@@ -21,8 +21,14 @@ namespace CodetyperFunctionBackend.Functions
 
         [Function("PromoteToModerator")]
         public async Task<HttpResponseData> PromoteToModerator(
-            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "users/promote/moderator/{userId}")] HttpRequestData req, string userId)
+            [HttpTrigger(AuthorizationLevel.User, "post", Route = "users/promote/moderator/{userId}")] HttpRequestData req, string userId)
         {
+            if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin))
+            {
+                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
+                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
+                return forbiddenResponse;
+            }
 
             _logger.LogInformation($"Promoting user {userId} to Moderator.");
 
@@ -45,6 +51,13 @@ namespace CodetyperFunctionBackend.Functions
         public async Task<HttpResponseData> PromoteToAdmin(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = "users/promote/admin/{userId}")] HttpRequestData req, string userId)
         {
+            if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin))
+            {
+                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
+                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
+                return forbiddenResponse;
+            }
+
             _logger.LogInformation($"Promoting user {userId} to Admin.");
 
             var result = await PromoteUser("Admin", userId);
@@ -80,6 +93,40 @@ namespace CodetyperFunctionBackend.Functions
                 return await AddUserToRole(conn, userId, rolePromotion);
             }
         }
+
+        [Function("GetUserById")]
+        public async Task<HttpResponseData> GetUserById(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "users/{userId}")] HttpRequestData req, string userId)
+        {
+            var response = req.CreateResponse();
+            string? connectionString = Environment.GetEnvironmentVariable("SqlConnectionString");
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                response.StatusCode = HttpStatusCode.InternalServerError;
+                await response.WriteStringAsync("Connection string is missing.");
+                return response;
+            }
+
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                var user = await FindUserById(conn, userId);
+
+                if (user == null)
+                {
+                    response.StatusCode = HttpStatusCode.NotFound;
+                    await response.WriteStringAsync($"User with ID '{userId}' not found.");
+                }
+                else
+                {
+                    await response.WriteAsJsonAsync(user);
+                }
+            }
+
+            return response;
+        }
+
         private async Task<User?> FindUserById(SqlConnection conn, string userId)
         {
             string query = "SELECT UserId, Username, RoleName FROM Users WHERE UserId = @UserId";
@@ -92,7 +139,7 @@ namespace CodetyperFunctionBackend.Functions
                     {
                         return new User
                         {
-                            UserId = reader.GetInt32(0),
+                            UserId = reader.GetString(0),
                             Username = reader.GetString(1),
                             RoleName = reader.GetString(2)
                         };
