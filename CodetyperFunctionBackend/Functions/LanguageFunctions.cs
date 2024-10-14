@@ -19,11 +19,11 @@ namespace CodetyperFunctionBackend.Functions
         }
 
         [Function("AddLanguage")]
-        public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequestData req)
+        public async Task<HttpResponseData> AddLanguage([HttpTrigger(AuthorizationLevel.User, "post", Route = null)] HttpRequestData req)
         {
             _logger.LogInformation("Processing a request to add a language.");
 
-            if (!AuthHelper.IsUserAuthorized(req, "SuperAdmin", "Admin"))
+            if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin))
             {
                 var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
                 await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
@@ -46,10 +46,27 @@ namespace CodetyperFunctionBackend.Functions
 
             using (SqlConnection conn = new SqlConnection(connectionString))
             {
-                conn.Open();
-                var text = "INSERT INTO Languages (name) VALUES (@name)";
+                await conn.OpenAsync();
 
-                using (SqlCommand cmd = new SqlCommand(text, conn))
+                // check if language already exists
+                string checkQuery = "SELECT COUNT(1) FROM Languages WHERE LOWER(Name) = LOWER(@Name)";
+                using (SqlCommand cmd = new SqlCommand(checkQuery, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Name", languageName);
+
+                    var exists = (int)await cmd.ExecuteScalarAsync();
+
+                    if (exists > 0)
+                    {
+                        var conflictResponse = req.CreateResponse(HttpStatusCode.Conflict);
+                        await conflictResponse.WriteStringAsync($"Language '{languageName}' already exists.");
+                        return conflictResponse;
+                    }
+                }
+
+                var addQuery = "INSERT INTO Languages (name) VALUES (@name)";
+
+                using (SqlCommand cmd = new SqlCommand(addQuery, conn))
                 {
                     cmd.Parameters.AddWithValue("@name", languageName);
                     cmd.ExecuteNonQuery();
@@ -92,6 +109,14 @@ namespace CodetyperFunctionBackend.Functions
             }
 
             var response = req.CreateResponse(HttpStatusCode.OK);
+
+            if (languages.Count == 0)
+            {
+                await response.WriteAsJsonAsync(new { message = "No languages found", data = languages });
+                response.StatusCode = HttpStatusCode.OK;
+                return response;
+            }
+
             await response.WriteAsJsonAsync(languages);
             return response;
         }
@@ -104,7 +129,7 @@ namespace CodetyperFunctionBackend.Functions
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
                 await conn.OpenAsync();
-                string query = "SELECT Name FROM Languages WHERE Name = @Name";
+                string query = "SELECT Name FROM Languages WHERE LOWER(Name) = LOWER(@Name)";
 
                 using (SqlCommand cmd = new SqlCommand(query, conn))
                 {

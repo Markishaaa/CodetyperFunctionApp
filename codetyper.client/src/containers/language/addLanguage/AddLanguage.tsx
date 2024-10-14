@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { addLanguage } from '../../../services/LanguageService';
 import { toast } from 'react-toastify';
 
-const AddLanguageContainer: React.FC = () => {
+const AddLanguage: React.FC = () => {
     const [languageName, setLanguageName] = useState("");
 
     const handleAddLanguage = async () => {
@@ -27,8 +27,11 @@ const AddLanguageContainer: React.FC = () => {
 
     return (
         <div>
+            <label>Language name</label>
             <input
+                required
                 type="text"
+                placeholder="Enter language name"
                 value={languageName}
                 onChange={(e) => setLanguageName(e.target.value)}
             />
@@ -37,4 +40,4 @@ const AddLanguageContainer: React.FC = () => {
     );
 };
 
-export default AddLanguageContainer;
+export default AddLanguage;
