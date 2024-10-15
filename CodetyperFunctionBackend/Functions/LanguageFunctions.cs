@@ -41,16 +41,9 @@ namespace CodetyperFunctionBackend.Functions
 
             var languageDto = Newtonsoft.Json.JsonConvert.DeserializeObject<Language>(requestBody);
 
-            if (string.IsNullOrEmpty(languageDto?.Name))
-            {
-                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Please pass a language name in the request body.");
-                return badRequestResponse;
-            }
+            var (success, message) = await _languageService.AddLanguageAsync(languageDto!);
 
-            (bool success, string message) = await _languageService.AddLanguageAsync(languageDto.Name);
-
-            var response = req.CreateResponse(success ? HttpStatusCode.OK : HttpStatusCode.Conflict);
+            var response = req.CreateResponse(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest);
             await response.WriteStringAsync(message);
             return response;
         }

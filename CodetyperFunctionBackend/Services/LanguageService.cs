@@ -12,15 +12,17 @@ namespace CodetyperFunctionBackend.Services
             _languageRepository = languageRepository;
         }
 
-        public async Task<(bool Success, string Message)> AddLanguageAsync(string languageName)
+        public async Task<(bool success, string message)> AddLanguageAsync(Language language)
         {
-            if (await _languageRepository.LanguageExistsAsync(languageName))
-            {
-                return (false, $"Language '{languageName}' already exists.");
-            }
+            if (language == null)
+                return (false, "Language cannot be null.");
+            else if (string.IsNullOrEmpty(language.Name))
+                return (false, "Language name cannot be null or empty.");
+            else if (await _languageRepository.LanguageExistsAsync(language.Name))
+                return (false, $"Language '{language.Name}' already exists.");
 
-            await _languageRepository.AddLanguageAsync(languageName);
-            return (true, $"Language '{languageName}' added successfully.");
+            await _languageRepository.AddLanguageAsync(language.Name);
+            return (true, $"Language '{language.Name}' added successfully.");
         }
 
         public async Task<IEnumerable<Language>> GetAllLanguagesAsync()
