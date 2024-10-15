@@ -13,21 +13,13 @@ namespace CodetyperFunctionBackend.Repositories
             _dbService = dbService;
         }
 
-        public async Task AddTaskAsync(string name, string description, bool shown, string creatorId)
+        public async Task AddTaskAsync(CodingTask task)
         {
             var addQuery = $"INSERT INTO {CodingTask.Fields.TableName} " +
                 $"({CodingTask.Fields.Name}, {CodingTask.Fields.Description}, {CodingTask.Fields.Shown}, {CodingTask.Fields.CreatorId}) " +
                 $"VALUES (@Name, @Description, @Shown, @CreatorId)";
 
-            var parameters = new
-            {
-                Name = name,
-                Description = description,
-                Shown = shown,
-                CreatorId = creatorId
-            };
-
-            await _dbService.ExecuteAsync(conn => conn.ExecuteAsync(addQuery, parameters));
+            await _dbService.ExecuteAsync(conn => conn.ExecuteAsync(addQuery, task));
         }
 
         public async Task<int> CountTasksAsync(bool shown)
@@ -77,16 +69,16 @@ namespace CodetyperFunctionBackend.Repositories
             });
         }
 
-        public async Task<User?> GetTaskCreatorAsync(string creatorId)
+        public async Task<CodingTask?> GetTaskByIdAsync(int taskId)
         {
-            string creatorQuery = @$"SELECT 
-                    {User.Fields.UserId}, {User.Fields.Username}, {User.Fields.Email} 
-                FROM {User.Fields.TableName} 
-                WHERE {User.Fields.UserId} = @CreatorId";
+            string query = @$"SELECT
+                    {CodingTask.Fields.Name}, {CodingTask.Fields.Description}
+                FROM {CodingTask.Fields.TableName}
+                WHERE Id = @TaskId";
 
             return await _dbService.ExecuteAsync(async conn =>
             {
-                return await conn.QueryFirstOrDefaultAsync<User>(creatorQuery, new { CreatorId = creatorId });
+                return await conn.QueryFirstOrDefaultAsync<CodingTask>(query, new { TaskId = taskId });
             });
         }
     }

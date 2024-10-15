@@ -16,6 +16,11 @@ var host = new HostBuilder()
 
         services.AddScoped<TaskRepository>();
         services.AddScoped<TaskService>();
+
+        services.AddScoped<SnippetRepository>();
+        services.AddScoped<SnippetService>();
+
+        services.AddScoped<UserRepository>();
     })
     .Build();
 
