@@ -10,13 +10,11 @@ namespace CodetyperFunctionBackend.Functions
     internal class TaskFunctions
     {
         private readonly ILogger _logger;
-        private readonly string _connectionString;
         private readonly TaskService _taskService;
 
         public TaskFunctions(ILoggerFactory loggerFactory, TaskService taskService)
         {
             _logger = loggerFactory.CreateLogger<LanguageFunctions>();
-            _connectionString = Environment.GetEnvironmentVariable("SqlConnectionString")!;
             _taskService = taskService;
         }
 

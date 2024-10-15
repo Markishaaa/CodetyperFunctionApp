@@ -6,10 +6,12 @@ namespace CodetyperFunctionBackend.Services
     internal class TaskService
     {
         private readonly TaskRepository _taskRepository;
+        private readonly UserRepository _userRepository;
 
-        public TaskService(TaskRepository taskRepository)
+        public TaskService(TaskRepository taskRepository, UserRepository userRepository)
         {
             _taskRepository = taskRepository;
+            _userRepository = userRepository;
         }
 
         public async Task<(bool success, string message)> AddTaskAsync(CodingTask task)
@@ -27,7 +29,7 @@ namespace CodetyperFunctionBackend.Services
                 return (false, "Creator id cannot be null or empty.");
             }
 
-            await _taskRepository.AddTaskAsync(task.Name, task.Description, task.Shown, task.CreatorId);
+            await _taskRepository.AddTaskAsync(task);
 
             string message = task.Shown ? $"Task '{task.Name}' added." : $"Request to add task '{task.Name}' sent.";
             return (true, message);
@@ -60,7 +62,7 @@ namespace CodetyperFunctionBackend.Services
             if (task == null)
                 return (null, null, count);
 
-            var creator = await _taskRepository.GetTaskCreatorAsync(task.CreatorId);
+            var creator = await _userRepository.GetUserByIdAsync(task.CreatorId);
 
             return (task, creator, count);
         }
