@@ -6,5 +6,11 @@ namespace CodetyperFunctionBackend.Model
     {
         [JsonPropertyName("name")]
         public required string Name { get; set; }
+
+        public static class Fields
+        {
+            public const string TableName = "Languages";
+            public const string Name = "Name";
+        }
     }
 }
