@@ -21,6 +21,7 @@ var host = new HostBuilder()
         services.AddScoped<SnippetService>();
 
         services.AddScoped<UserRepository>();
+        services.AddScoped<UserService>();
     })
     .Build();
 
