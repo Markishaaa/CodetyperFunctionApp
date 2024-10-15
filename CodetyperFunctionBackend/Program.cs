@@ -13,6 +13,9 @@ var host = new HostBuilder()
 
         services.AddScoped<LanguageRepository>();
         services.AddScoped<LanguageService>();
+
+        services.AddScoped<TaskRepository>();
+        services.AddScoped<TaskService>();
     })
     .Build();
 
