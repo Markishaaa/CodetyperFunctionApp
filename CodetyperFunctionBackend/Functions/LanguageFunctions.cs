@@ -1,8 +1,8 @@
 ﻿using CodetyperFunctionBackend.Model;
+using CodetyperFunctionBackend.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using System.Data.SqlClient;
 using System.Net;
 
 namespace CodetyperFunctionBackend.Functions
@@ -10,12 +10,12 @@ namespace CodetyperFunctionBackend.Functions
     internal class LanguageFunctions
     {
         private readonly ILogger _logger;
-        private readonly string _connectionString;
+        private readonly LanguageService _languageService;
 
-        public LanguageFunctions(ILoggerFactory loggerFactory)
+        public LanguageFunctions(ILoggerFactory loggerFactory, LanguageService languageService)
         {
             _logger = loggerFactory.CreateLogger<LanguageFunctions>();
-            _connectionString = Environment.GetEnvironmentVariable("SqlConnectionString")!;
+            _languageService = languageService;
         }
 
         [Function("AddLanguage")]
@@ -32,88 +32,41 @@ namespace CodetyperFunctionBackend.Functions
 
             var requestBody = await req.ReadAsStringAsync();
 
-            dynamic? data = Newtonsoft.Json.JsonConvert.DeserializeObject(requestBody);
-            string? languageName = data?.name;
+            if (string.IsNullOrEmpty(requestBody))
+            {
+                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequestResponse.WriteStringAsync("Request body is empty.");
+                return badRequestResponse;
+            }
 
-            if (string.IsNullOrEmpty(languageName))
+            var languageDto = Newtonsoft.Json.JsonConvert.DeserializeObject<Language>(requestBody);
+
+            if (string.IsNullOrEmpty(languageDto?.Name))
             {
                 var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badRequestResponse.WriteStringAsync("Please pass a language name in the request body.");
                 return badRequestResponse;
             }
 
-            string? connectionString = Environment.GetEnvironmentVariable("SqlConnectionString");
+            (bool success, string message) = await _languageService.AddLanguageAsync(languageDto.Name);
 
-            using (SqlConnection conn = new SqlConnection(connectionString))
-            {
-                await conn.OpenAsync();
-
-                // check if language already exists
-                string checkQuery = "SELECT COUNT(1) FROM Languages WHERE LOWER(Name) = LOWER(@Name)";
-                using (SqlCommand cmd = new SqlCommand(checkQuery, conn))
-                {
-                    cmd.Parameters.AddWithValue("@Name", languageName);
-
-                    var exists = (int)await cmd.ExecuteScalarAsync();
-
-                    if (exists > 0)
-                    {
-                        var conflictResponse = req.CreateResponse(HttpStatusCode.Conflict);
-                        await conflictResponse.WriteStringAsync($"Language '{languageName}' already exists.");
-                        return conflictResponse;
-                    }
-                }
-
-                var addQuery = "INSERT INTO Languages (name) VALUES (@name)";
-
-                using (SqlCommand cmd = new SqlCommand(addQuery, conn))
-                {
-                    cmd.Parameters.AddWithValue("@name", languageName);
-                    cmd.ExecuteNonQuery();
-                }
-            }
-
-            var response = req.CreateResponse(HttpStatusCode.OK);
-            await response.WriteStringAsync($"Language {languageName} added to the database.");
+            var response = req.CreateResponse(success ? HttpStatusCode.OK : HttpStatusCode.Conflict);
+            await response.WriteStringAsync(message);
             return response;
         }
 
         [Function("GetAllLanguages")]
         public async Task<HttpResponseData> GetAllLanguages([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "languages/getAll")] HttpRequestData req)
         {
-            var languages = new List<Language>();
+            _logger.LogInformation("Processing a request to get all languages.");
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                await conn.OpenAsync();
-                string query = "SELECT Name FROM Languages";
-
-                using (SqlCommand cmd = new SqlCommand(query, conn))
-                {
-                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            var language = new Language
-                            {
-                                Name = reader["Name"]?.ToString()
-                            };
-
-                            if (!string.IsNullOrEmpty(language.Name))
-                            {
-                                languages.Add(language);
-                            }
-                        }
-                    }
-                }
-            }
+            var languages = await _languageService.GetAllLanguagesAsync();
 
             var response = req.CreateResponse(HttpStatusCode.OK);
 
-            if (languages.Count == 0)
+            if (!languages.Any())
             {
                 await response.WriteAsJsonAsync(new { message = "No languages found", data = languages });
-                response.StatusCode = HttpStatusCode.OK;
                 return response;
             }
 
@@ -124,31 +77,12 @@ namespace CodetyperFunctionBackend.Functions
         [Function("GetLanguageByName")]
         public async Task<HttpResponseData> GetLanguageByName([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "languages/get/{languageName}")] HttpRequestData req, string languageName)
         {
-            Language language = null;
+            _logger.LogInformation($"Processing a request to get language by name {languageName}.");
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                await conn.OpenAsync();
-                string query = "SELECT Name FROM Languages WHERE LOWER(Name) = LOWER(@Name)";
-
-                using (SqlCommand cmd = new SqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("@Name", languageName);
-
-                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
-                    {
-                        if (await reader.ReadAsync())
-                        {
-                            language = new Language
-                            {
-                                Name = reader["Name"].ToString(),
-                            };
-                        }
-                    }
-                }
-            }
+            var language = await _languageService.GetLanguageByNameAsync(languageName);
 
             var response = req.CreateResponse();
+
             if (language == null)
             {
                 response.StatusCode = HttpStatusCode.NotFound;
