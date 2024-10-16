@@ -1,5 +1,6 @@
 ﻿using CodetyperFunctionBackend.DTOs;
 using CodetyperFunctionBackend.Services;
+using CodetyperFunctionBackend.Utils;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -28,9 +29,7 @@ namespace CodetyperFunctionBackend.Functions
 
             if (string.IsNullOrEmpty(requestBody))
             {
-                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Request body is empty.");
-                return badRequestResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
             var userDto = Newtonsoft.Json.JsonConvert.DeserializeObject<UserDto>(requestBody)!;
@@ -39,17 +38,14 @@ namespace CodetyperFunctionBackend.Functions
             {
                 var (success, message) = await _userService.RegisterUserAsync(userDto);
 
-                var response = req.CreateResponse(success ? HttpStatusCode.Created : HttpStatusCode.BadRequest);
-                await response.WriteStringAsync(message);
-                return response;
+                HttpStatusCode statusCode = success ? HttpStatusCode.Created : HttpStatusCode.BadRequest;
+                return await req.CreateResponseAsync(statusCode, message);
             }
             catch
             {
-                var msg = "Cannot access the database.";
-                _logger.LogInformation(msg);
-                var timeoutResponse = req.CreateResponse(HttpStatusCode.GatewayTimeout);
-                await timeoutResponse.WriteStringAsync(msg);
-                return timeoutResponse;
+                var message = "Cannot access the database.";
+                _logger.LogInformation(message);
+                return await req.CreateResponseAsync(HttpStatusCode.GatewayTimeout, message);
             }
         }
 
@@ -62,9 +58,7 @@ namespace CodetyperFunctionBackend.Functions
 
             if (string.IsNullOrEmpty(requestBody))
             {
-                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Request body is empty.");
-                return badRequestResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
             var userDto = Newtonsoft.Json.JsonConvert.DeserializeObject<UserDto>(requestBody)!;
@@ -75,9 +69,7 @@ namespace CodetyperFunctionBackend.Functions
 
                 if (!result.Success)
                 {
-                    var unauthorizedResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
-                    await unauthorizedResponse.WriteStringAsync(result.Message);
-                    return unauthorizedResponse;
+                    return await req.CreateResponseAsync(HttpStatusCode.Unauthorized, result.Message);
                 }
 
                 var successResponse = req.CreateResponse(HttpStatusCode.OK);
@@ -90,9 +82,7 @@ namespace CodetyperFunctionBackend.Functions
             {
                 var message = "Cannot access the database.";
                 _logger.LogInformation(message);
-                var timeoutResponse = req.CreateResponse(HttpStatusCode.GatewayTimeout);
-                await timeoutResponse.WriteStringAsync(message);
-                return timeoutResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.GatewayTimeout, message);
             }
         }
     }

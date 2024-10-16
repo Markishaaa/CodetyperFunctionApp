@@ -31,9 +31,7 @@ namespace CodetyperFunctionBackend.Functions
 
             if (string.IsNullOrEmpty(requestBody))
             {
-                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Request body is empty.");
-                return badRequestResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
             var taskDto = Newtonsoft.Json.JsonConvert.DeserializeObject<CodingTask>(requestBody);
@@ -43,9 +41,7 @@ namespace CodetyperFunctionBackend.Functions
 
             var (success, message) = await _taskService.AddTaskAsync(taskDto!);
 
-            var response = req.CreateResponse(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest);
-            await response.WriteStringAsync(message);
-            return response;
+            return await req.CreateResponseAsync(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest, message);
         }
 
         [Function("GetShownTasks")]
@@ -77,9 +73,7 @@ namespace CodetyperFunctionBackend.Functions
 
             if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin, Roles.Moderator))
             {
-                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
-                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
-                return forbiddenResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
             }
 
             var (task, creator, count) = await _taskService.GetRandomTaskRequestAndCountAsync();
