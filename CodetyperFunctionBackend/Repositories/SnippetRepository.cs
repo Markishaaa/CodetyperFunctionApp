@@ -77,6 +77,56 @@ namespace CodetyperFunctionBackend.Repositories
             });
         }
 
+        public async Task<int> AcceptSnippetAsync(int snippetId)
+        {
+            string query = $"UPDATE {CodeSnippet.Fields.TableName} " +
+                $"SET {CodeSnippet.Fields.Shown} = @shown " +
+                $"WHERE {CodeSnippet.Fields.Id} = @Id";
 
+            return await _dbService.ExecuteAsync(async conn =>
+            {
+                return await conn.ExecuteAsync(query, new { shown = true, Id = snippetId });
+            });
+        }
+
+        public async Task<CodeSnippet?> GetSnippetByIdAsync(int snippetId)
+        {
+            string query = @$"SELECT
+                    {CodeSnippet.Fields.Content}, {CodeSnippet.Fields.LanguageName}, 
+                    {CodeSnippet.Fields.TaskId}, {CodeSnippet.Fields.CreatorId} 
+                FROM {CodeSnippet.Fields.TableName}
+                WHERE Id = @SnippetId";
+
+            return await _dbService.ExecuteAsync(async conn =>
+            {
+                return await conn.QueryFirstOrDefaultAsync<CodeSnippet>(query, new { SnippetId = snippetId });
+            });
+        }
+
+        public async Task ArchiveSnippetAsync(ArchivedSnippet archivedSnippet)
+        {
+            string archiveQuery = @$"
+                INSERT INTO {ArchivedSnippet.Fields.TableName} (
+                    {ArchivedSnippet.Fields.Content}, {ArchivedSnippet.Fields.DeniedAt}, {ArchivedSnippet.Fields.LanguageName}, 
+                    {ArchivedSnippet.Fields.TaskId}, {ArchivedSnippet.Fields.CreatorId}, {ArchivedSnippet.Fields.StaffId})
+                VALUES (@Content, @DeniedAt, @LanguageName, @TaskId, @CreatorId, @StaffId)";
+
+            await _dbService.ExecuteAsync(async conn =>
+            {
+                await conn.ExecuteAsync(archiveQuery, archivedSnippet);
+            });
+        }
+
+        public async Task<bool> DeleteSnippetAsync(int snippetId)
+        {
+            string deleteQuery = $"DELETE FROM {CodeSnippet.Fields.TableName} " +
+                $"WHERE {CodeSnippet.Fields.Id} = @id";
+
+            return await _dbService.ExecuteAsync(async conn =>
+            {
+                var result = await conn.ExecuteAsync(deleteQuery, new { id = snippetId });
+                return result > 0;
+            });
+        }
     }
 }

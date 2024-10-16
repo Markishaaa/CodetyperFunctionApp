@@ -1,71 +1,45 @@
 using CodetyperFunctionBackend.Model;
+using CodetyperFunctionBackend.Services;
+using CodetyperFunctionBackend.Utils;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using System.Data.SqlClient;
+using Newtonsoft.Json;
 using System.Net;
 
 namespace CodetyperFunctionBackend.Functions
 {
-    public class ModerationFunctions
+    internal class ModerationFunctions
     {
         private readonly ILogger<ModerationFunctions> _logger;
-        private readonly string _connectionString;
+        private readonly TaskService _taskService;
+        private readonly SnippetService _snippetService;
 
-        public ModerationFunctions(ILogger<ModerationFunctions> logger)
+        public ModerationFunctions(ILogger<ModerationFunctions> logger, TaskService taskService, SnippetService snippetService)
         {
             _logger = logger;
-            _connectionString = Environment.GetEnvironmentVariable("SqlConnectionString")!;
+            _taskService = taskService;
+            _snippetService = snippetService;
         }
 
         [Function("AcceptTaskRequest")]
         public async Task<HttpResponseData> AcceptTaskRequest(
-        [HttpTrigger(AuthorizationLevel.User, "put", Route = "tasks/acceptRequest/{id}")] HttpRequestData req,
-        int id)
+        [HttpTrigger(AuthorizationLevel.User, "put", Route = "tasks/acceptRequest/{id}")] HttpRequestData req, int id)
         {
             if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin, Roles.Moderator))
             {
-                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
-                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
-                return forbiddenResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
             }
 
             _logger.LogInformation($"Processing a request to accept task with ID {id}");
 
-            if (string.IsNullOrEmpty(_connectionString))
+            bool success = await _taskService.AcceptTaskRequestAsync(id);
+            if (success)
             {
-                var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-                await errorResponse.WriteStringAsync("Database connection string is missing.");
-                return errorResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.OK, $"Task request accepted.");
             }
 
-            string query = "UPDATE Tasks SET Shown = @shown WHERE Id = @id";
-
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                await conn.OpenAsync();
-
-                using (SqlCommand cmd = new SqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("@shown", true);
-                    cmd.Parameters.AddWithValue("@id", id);
-
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync();
-
-                    if (rowsAffected > 0)
-                    {
-                        var successResponse = req.CreateResponse(HttpStatusCode.OK);
-                        await successResponse.WriteStringAsync($"Task with ID {id} was successfully updated.");
-                        return successResponse;
-                    }
-                    else
-                    {
-                        var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
-                        await notFoundResponse.WriteStringAsync($"Task with ID {id} not found.");
-                        return notFoundResponse;
-                    }
-                }
-            }
+            return await req.CreateResponseAsync(HttpStatusCode.NotFound, $"Task with ID {id} not found.");
         }
 
         [Function("DenyTaskRequest")]
@@ -74,242 +48,77 @@ namespace CodetyperFunctionBackend.Functions
         {
             if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin, Roles.Moderator))
             {
-                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
-                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
-                return forbiddenResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
             }
 
             _logger.LogInformation($"Processing a request to deny task with ID {id}");
 
-            if (string.IsNullOrEmpty(_connectionString))
+            var requestBody = await req.ReadAsStringAsync();
+
+            if (string.IsNullOrEmpty(requestBody))
             {
-                var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-                await errorResponse.WriteStringAsync("Database connection string is missing.");
-                return errorResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
-            string selectQuery = "SELECT Name, Description, CreatorId FROM Tasks WHERE Id = @id";
+            dynamic? data = JsonConvert.DeserializeObject(requestBody);
+            string? reason = data?.reason;
+            string? staffId = data?.staffId;
 
-            string archiveQuery = @"
-                INSERT INTO Archive_Tasks (Name, Description, DeniedAt, Reason, CreatorId, StaffId)
-                VALUES (@name, @description, @deniedAt, @reason, @creatorId, @staffId)";
+            var (success, message) = await _taskService.DenyAndArchiveTaskRequestAsync(id, reason!, staffId!);
 
-            string deleteQuery = "DELETE FROM Tasks WHERE Id = @id";
+            if (!success) return await req.CreateResponseAsync(HttpStatusCode.BadRequest, message);
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                await conn.OpenAsync();
-
-                using (SqlTransaction transaction = conn.BeginTransaction())
-                {
-                    string taskName, taskDescription, creatorId;
-
-                    using (SqlCommand selectCmd = new SqlCommand(selectQuery, conn, transaction))
-                    {
-                        selectCmd.Parameters.AddWithValue("@id", id);
-                        using (var reader = await selectCmd.ExecuteReaderAsync())
-                        {
-                            if (!reader.Read())
-                            {
-                                transaction.Rollback();
-                                var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
-                                await notFoundResponse.WriteStringAsync($"Task with ID {id} not found.");
-                                return notFoundResponse;
-                            }
-
-                            taskName = reader["Name"].ToString();
-                            taskDescription = reader["Description"].ToString();
-                            creatorId = reader["CreatorId"].ToString();
-                        }
-                    }
-
-                    var requestBody = await req.ReadAsStringAsync();
-                    dynamic? data = Newtonsoft.Json.JsonConvert.DeserializeObject(requestBody);
-                    string? reason = data?.reason;
-                    string staffId = data?.staffId;
-
-                    if (string.IsNullOrEmpty(reason) || string.IsNullOrEmpty(staffId))
-                    {
-                        var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                        await badRequestResponse.WriteStringAsync("Please provide a reason and staffId in the request body.");
-                        return badRequestResponse;
-                    }
-
-                    // archiving the task
-                    using (SqlCommand archiveCmd = new SqlCommand(archiveQuery, conn, transaction))
-                    {
-                        archiveCmd.Parameters.AddWithValue("@name", taskName);
-                        archiveCmd.Parameters.AddWithValue("@description", taskDescription);
-                        archiveCmd.Parameters.AddWithValue("@deniedAt", DateTime.UtcNow);
-                        archiveCmd.Parameters.AddWithValue("@reason", reason);
-                        archiveCmd.Parameters.AddWithValue("@creatorId", creatorId);
-                        archiveCmd.Parameters.AddWithValue("@staffId", staffId);
-
-                        await archiveCmd.ExecuteNonQueryAsync();
-                    }
-
-                    // deleting the task
-                    using (SqlCommand deleteCmd = new SqlCommand(deleteQuery, conn, transaction))
-                    {
-                        deleteCmd.Parameters.AddWithValue("@id", id);
-                        await deleteCmd.ExecuteNonQueryAsync();
-                    }
-
-                    transaction.Commit();
-
-                    var successResponse = req.CreateResponse(HttpStatusCode.OK);
-                    await successResponse.WriteStringAsync($"Task with ID {id} has been denied and archived.");
-                    return successResponse;
-                }
-            }
+            return await req.CreateResponseAsync(HttpStatusCode.OK, message);
         }
 
 
         [Function("AcceptSnippetRequest")]
         public async Task<HttpResponseData> AcceptSnippetRequest(
-            [HttpTrigger(AuthorizationLevel.User, "put", Route = "snippets/acceptRequest/{id}")] HttpRequestData req,
-            int id)
+            [HttpTrigger(AuthorizationLevel.User, "put", Route = "snippets/acceptRequest/{id}")] HttpRequestData req, int id)
         {
             if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin, Roles.Moderator))
             {
-                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
-                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
-                return forbiddenResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
             }
 
             _logger.LogInformation($"Processing a request to accept snippet with ID {id}");
 
-            if (string.IsNullOrEmpty(_connectionString))
+            bool success = await _snippetService.AcceptSnippetRequestAsync(id);
+            if (success)
             {
-                var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-                await errorResponse.WriteStringAsync("Database connection string is missing.");
-                return errorResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.OK, $"Snippet request accepted.");
             }
 
-            string query = "UPDATE Snippets SET Shown = @shown WHERE Id = @id";
-
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                await conn.OpenAsync();
-
-                using (SqlCommand cmd = new SqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("@shown", true);
-                    cmd.Parameters.AddWithValue("@id", id);
-
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync();
-
-                    if (rowsAffected > 0)
-                    {
-                        var successResponse = req.CreateResponse(HttpStatusCode.OK);
-                        await successResponse.WriteStringAsync($"Snippet with ID {id} was successfully updated.");
-                        return successResponse;
-                    }
-                    else
-                    {
-                        var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
-                        await notFoundResponse.WriteStringAsync($"Snippet with ID {id} not found.");
-                        return notFoundResponse;
-                    }
-                }
-            }
+            return await req.CreateResponseAsync(HttpStatusCode.NotFound, $"Task with ID {id} not found.");
         }
 
         [Function("DenySnippetRequest")]
         public async Task<HttpResponseData> DenySnippetRequest(
-            [HttpTrigger(AuthorizationLevel.User, "delete", Route = "snippets/denyRequest/{id}")] HttpRequestData req,
-            int id)
+            [HttpTrigger(AuthorizationLevel.User, "delete", Route = "snippets/denyRequest/{id}")] HttpRequestData req, int id)
         {
             if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin, Roles.Moderator))
             {
-                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
-                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
-                return forbiddenResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
             }
 
             _logger.LogInformation($"Processing a request to deny snippet with ID {id}");
 
-            if (string.IsNullOrEmpty(_connectionString))
+            var requestBody = await req.ReadAsStringAsync();
+
+            if (string.IsNullOrEmpty(requestBody))
             {
-                var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-                await errorResponse.WriteStringAsync("Database connection string is missing.");
-                return errorResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
-            string selectQuery = "SELECT Content, LanguageName, TaskId, CreatorId FROM Snippets WHERE Id = @id";
-            string archiveQuery = @"
-                INSERT INTO ArchivedSnippet (Content, DeniedAt, LanguageName, TaskId, CreatorId, StaffId)
-                VALUES (@content, @deniedAt, @languageName, @taskId, @creatorId, @staffId)";
-            string deleteQuery = "DELETE FROM Snippets WHERE Id = @id";
+            dynamic? data = JsonConvert.DeserializeObject(requestBody);
+            string? reason = data?.reason;
+            string? staffId = data?.staffId;
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                await conn.OpenAsync();
+            var (success, message) = await _snippetService.DenyAndArchiveSnippetRequestAsync(id, reason!, staffId!);
 
-                using (SqlTransaction transaction = conn.BeginTransaction())
-                {
-                    string snippetContent, languageName, creatorId;
-                    int taskId;
+            if (!success) return await req.CreateResponseAsync(HttpStatusCode.BadRequest, message);
 
-                    using (SqlCommand selectCmd = new SqlCommand(selectQuery, conn, transaction))
-                    {
-                        selectCmd.Parameters.AddWithValue("@id", id);
-                        using (SqlDataReader reader = await selectCmd.ExecuteReaderAsync())
-                        {
-                            if (!reader.Read())
-                            {
-                                transaction.Rollback();
-                                var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
-                                await notFoundResponse.WriteStringAsync($"Snippet with ID {id} not found.");
-                                return notFoundResponse;
-                            }
-
-                            snippetContent = reader["Content"].ToString();
-                            languageName = reader["LanguageName"].ToString();
-                            taskId = reader.GetInt32(reader.GetOrdinal("TaskId"));
-                            creatorId = reader["CreatorId"].ToString();
-                        }
-                    }
-
-                    var requestBody = await req.ReadAsStringAsync();
-                    dynamic? data = Newtonsoft.Json.JsonConvert.DeserializeObject(requestBody);
-                    string? reason = data?.reason;
-                    string staffId = data?.staffId;
-
-                    if (string.IsNullOrEmpty(reason) || string.IsNullOrEmpty(staffId))
-                    {
-                        var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                        await badRequestResponse.WriteStringAsync("Please provide a reason and staffId in the request body.");
-                        return badRequestResponse;
-                    }
-
-                    using (SqlCommand archiveCmd = new SqlCommand(archiveQuery, conn, transaction))
-                    {
-                        // no @id parameter here
-                        archiveCmd.Parameters.AddWithValue("@content", snippetContent);
-                        archiveCmd.Parameters.AddWithValue("@deniedAt", DateTime.UtcNow);
-                        archiveCmd.Parameters.AddWithValue("@languageName", languageName);
-                        archiveCmd.Parameters.AddWithValue("@taskId", taskId);
-                        archiveCmd.Parameters.AddWithValue("@creatorId", creatorId);
-                        archiveCmd.Parameters.AddWithValue("@staffId", staffId);
-
-                        await archiveCmd.ExecuteNonQueryAsync();
-                    }
-
-                    using (SqlCommand deleteCmd = new SqlCommand(deleteQuery, conn, transaction))
-                    {
-                        deleteCmd.Parameters.AddWithValue("@id", id);
-                        await deleteCmd.ExecuteNonQueryAsync();
-                    }
-
-                    transaction.Commit();
-
-                    var successResponse = req.CreateResponse(HttpStatusCode.OK);
-                    await successResponse.WriteStringAsync($"Snippet with ID {id} has been denied and archived.");
-                    return successResponse;
-                }
-            }
+            return await req.CreateResponseAsync(HttpStatusCode.OK, message);
         }
-
     }
 }
