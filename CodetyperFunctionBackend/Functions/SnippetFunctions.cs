@@ -1,5 +1,6 @@
 using CodetyperFunctionBackend.Model;
 using CodetyperFunctionBackend.Services;
+using CodetyperFunctionBackend.Utils;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
