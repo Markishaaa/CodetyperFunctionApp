@@ -1,5 +1,6 @@
 using CodetyperFunctionBackend.Model;
 using CodetyperFunctionBackend.Services;
+using CodetyperFunctionBackend.Utils;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -30,9 +31,7 @@ namespace CodetyperFunctionBackend.Functions
 
             if (string.IsNullOrEmpty(requestBody))
             {
-                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Request body is empty.");
-                return badRequestResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
             var snippetDto = Newtonsoft.Json.JsonConvert.DeserializeObject<CodeSnippet>(requestBody);
@@ -41,9 +40,7 @@ namespace CodetyperFunctionBackend.Functions
 
             var (success, message) = await _snippetService.AddSnippetAsync(snippetDto!);
 
-            var response = req.CreateResponse(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest);
-            await response.WriteStringAsync(message);
-            return response;
+            return await req.CreateResponseAsync(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest, message);
         }
 
         [Function("GetRandomSnippet")]
@@ -99,6 +96,11 @@ namespace CodetyperFunctionBackend.Functions
         public async Task<HttpResponseData> GetRandomSnippetRequest(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "snippets/randomRequest")] HttpRequestData req)
         {
+            if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin, Roles.Moderator))
+            {
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
+            }
+
             _logger.LogInformation("Processing a request to a get random snippet request.");
 
             var (success, message, snippet, task, creator) = await _snippetService.GetRandomSnippetRequestAsync();

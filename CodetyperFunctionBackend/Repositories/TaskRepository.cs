@@ -72,13 +72,49 @@ namespace CodetyperFunctionBackend.Repositories
         public async Task<CodingTask?> GetTaskByIdAsync(int taskId)
         {
             string query = @$"SELECT
-                    {CodingTask.Fields.Name}, {CodingTask.Fields.Description}
+                    {CodingTask.Fields.Name}, {CodingTask.Fields.Description}, {CodingTask.Fields.CreatorId} 
                 FROM {CodingTask.Fields.TableName}
                 WHERE Id = @TaskId";
 
             return await _dbService.ExecuteAsync(async conn =>
             {
                 return await conn.QueryFirstOrDefaultAsync<CodingTask>(query, new { TaskId = taskId });
+            });
+        }
+
+        public async Task<int> AcceptTaskAsync(int id)
+        {
+            var query = $"UPDATE {CodingTask.Fields.TableName} " +
+                $"SET {CodingTask.Fields.Shown} = @shown " +
+                $"WHERE {CodingTask.Fields.Id} = @id";
+
+            return await _dbService.ExecuteAsync(async conn =>
+            {
+                return await conn.ExecuteAsync(query, new { id, shown = true });
+            });
+        }
+
+        public async Task ArchiveTaskAsync(ArchivedTask archivedTask)
+        {
+            var query = $@"
+                INSERT INTO {ArchivedTask.Fields.TableName} (
+                    {ArchivedTask.Fields.Name}, {ArchivedTask.Fields.Description}, {ArchivedTask.Fields.DeniedAt}, 
+                    {ArchivedTask.Fields.Reason}, {ArchivedTask.Fields.CreatorId}, {ArchivedTask.Fields.StaffId}) 
+                VALUES (@Name, @Description, @DeniedAt, @Reason, @CreatorId, @StaffId)";
+
+            await _dbService.ExecuteAsync(async conn =>
+            {
+                await conn.ExecuteAsync(query, archivedTask);
+            });
+        }
+
+        public async Task DeleteTaskAsync(int id)
+        {
+            var query = $"DELETE FROM {CodingTask.Fields.TableName} WHERE {CodingTask.Fields.Id} = @id";
+
+            await _dbService.ExecuteAsync(async conn =>
+            {
+                await conn.ExecuteAsync(query, new { id });
             });
         }
     }

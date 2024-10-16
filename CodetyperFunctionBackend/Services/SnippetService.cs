@@ -74,5 +74,31 @@ namespace CodetyperFunctionBackend.Services
 
             return (true, "Random snippet request retrieved successfully.", snippet, task, creator);
         }
+
+        public async Task<bool> AcceptSnippetRequestAsync(int snippetId)
+        {
+            int rowsAffected = await _snippetRepository.AcceptSnippetAsync(snippetId);
+            return rowsAffected > 0;
+        }
+
+        public async Task<(bool success, string message)> DenyAndArchiveSnippetRequestAsync(int snippetId, string reason, string staffId)
+        {
+            if (string.IsNullOrEmpty(reason) || string.IsNullOrEmpty(staffId))
+            {
+                return (false, "Please provide a reason and staffId in the request body.");
+            }
+
+            var snippet = await _snippetRepository.GetSnippetByIdAsync(snippetId);
+            if (snippet == null) return (false, $"Snippet with ID {snippetId} not found.");
+
+            ArchivedSnippet archivedSnippet = new ArchivedSnippet(snippet.Content, DateTime.UtcNow, snippet.LanguageName, snippet.TaskId, snippet.CreatorId, staffId);
+            archivedSnippet.Reason = reason;
+
+            await _snippetRepository.ArchiveSnippetAsync(archivedSnippet);
+
+            await _snippetRepository.DeleteSnippetAsync(snippetId);
+
+            return (true, $"Snippet denied and archived.");
+        }
     }
 }

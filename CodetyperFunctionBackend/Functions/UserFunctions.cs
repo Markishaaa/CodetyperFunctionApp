@@ -1,4 +1,5 @@
 ﻿using CodetyperFunctionBackend.Model;
+using CodetyperFunctionBackend.Utils;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -156,7 +157,10 @@ namespace CodetyperFunctionBackend.Functions
             {
                 cmd.Parameters.AddWithValue("@UserId", userId);
                 cmd.Parameters.AddWithValue("@Role", role);
-                return (int)await cmd.ExecuteScalarAsync() > 0;
+
+                var result = await cmd.ExecuteNonQueryAsync();
+
+                return result > 0;
             }
         }
 

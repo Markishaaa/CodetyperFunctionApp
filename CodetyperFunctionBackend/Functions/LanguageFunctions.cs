@@ -1,5 +1,6 @@
 ﻿using CodetyperFunctionBackend.Model;
 using CodetyperFunctionBackend.Services;
+using CodetyperFunctionBackend.Utils;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -25,27 +26,22 @@ namespace CodetyperFunctionBackend.Functions
 
             if (!AuthHelper.IsUserAuthorized(req, Roles.SuperAdmin, Roles.Admin))
             {
-                var forbiddenResponse = req.CreateResponse(HttpStatusCode.Forbidden);
-                await forbiddenResponse.WriteStringAsync("You do not have permission to perform this action.");
-                return forbiddenResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.Forbidden, "You do not have permission to perform this action.");
             }
 
             var requestBody = await req.ReadAsStringAsync();
 
             if (string.IsNullOrEmpty(requestBody))
             {
-                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Request body is empty.");
-                return badRequestResponse;
+                return await req.CreateResponseAsync(HttpStatusCode.BadRequest, "Request body is empty.");
             }
 
             var languageDto = Newtonsoft.Json.JsonConvert.DeserializeObject<Language>(requestBody);
 
             var (success, message) = await _languageService.AddLanguageAsync(languageDto!);
 
-            var response = req.CreateResponse(success ? HttpStatusCode.OK : HttpStatusCode.BadRequest);
-            await response.WriteStringAsync(message);
-            return response;
+            HttpStatusCode statusCode = success ? HttpStatusCode.Created : HttpStatusCode.BadRequest;
+            return await req.CreateResponseAsync(statusCode, message);
         }
 
         [Function("GetAllLanguages")]
