@@ -66,7 +66,7 @@
    ```
 2. Navigate to the project folder and install dependencies for the frontend:
    ```bash
-   cd codetyper/frontend
+   cd codetyper.client
    npm install
    ```
 3. Set up the Azure Function backend and database according to the provided documentation in the `/docs` folder.
